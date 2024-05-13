@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trade Finder</title>
+</head>
+<body>
+    <h1>Trade Finder</h1>
+    <input type="text" id="urlInput" placeholder="Enter URL here">
+    <button onclick="fetchAndProcessData()">Fetch Data</button>
+    <table id="resultsTable">
+        <thead>
+            <tr>
+                <th>Round</th>
+                <th>Killer</th>
+                <th>Kill Time</th>
+                <th>Trade Time Gap</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+    <button id="downloadBtn" style="display:none;" onclick="downloadCSV()">Download CSV</button>
+
+    <script>
+        function findTrades(data) {
+            data = Array.isArray(data) ? data : [data];
+            let trades = [];
+            data.forEach(item => {
+                const kills = item.data.kills;
+                let lastKillTime = {};
+
+                kills.forEach(kill => {
+                    const killer = kill.killer_puuid;
+                    const victim = kill.victim_puuid;
+                    const killTime = kill.kill_time_in_match;
+
+                    lastKillTime[killer] = killTime;
+
+                    if (victim in lastKillTime) {
+                        const timeSinceLastKill = (killTime - lastKillTime[victim]) / 1000;
+
+                        if (timeSinceLastKill <= 5 && kill.killer_team !== kill.victim_team) {
+                            trades.push({
+                                round: kill.round,
+                                killer: kill.killer_display_name,
+                                kill_time: killTime / 1000,
+                                trade_time_gap: timeSinceLastKill
+                            });
+                        }
+                    }
+                });
+            });
+            return trades;
+        }
+
+        function convertToCSV(data) {
+            if (data.length === 0) return '';
+            const csvRows = [];
+            const headers = Object.keys(data[0]);
+            csvRows.push(headers.join(','));
+            data.forEach(row => {
+                const values = headers.map(header => `"${row[header]}"`);
+                csvRows.push(values.join(','));
+            });
+            return csvRows.join('\n');
+        }
+
+        function fetchAndProcessData() {
+            const url = document.getElementById('urlInput').value;
+            fetch(url)
+            .then(response => response.json())
+            .then(jsonData => {
+                const trades = findTrades(jsonData);
+                const table = document.getElementById('resultsTable').getElementsByTagName('tbody')[0];
+                table.innerHTML = '';
+                trades.forEach(trade => {
+                    const row = table.insertRow();
+                    Object.values(trade).forEach(text => {
+                        const cell = row.insertCell();
+                        cell.textContent = text;
+                    });
+                });
+                window.csvData = convertToCSV(trades);
+                document.getElementById('downloadBtn').style.display = 'block';
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to fetch data. Check console for details.');
+            });
+        }
+
+        function downloadCSV() {
+            const csvContent = 'data:text/csv;charset=utf-8,' + encodeURIComponent(window.csvData);
+            const link = document.createElement('a');
+            link.href = csvContent;
+            link.download = 'trades.csv';
+            link.click();
+        }
+    </script>
+</body>
+</html>
